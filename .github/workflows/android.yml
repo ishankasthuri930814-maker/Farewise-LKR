@@ -9,10 +9,18 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    
+    # හැම step එකක්ම app ෆෝල්ඩරය ඇතුළේ රන් වෙන්න කියලා මෙතනින් කියනවා
+    defaults:
+      run:
+        working-directory: app
 
     steps:
     - name: Checkout Code
       uses: actions/checkout@v4
+      with:
+        sparse-checkout: |
+          app
 
     - name: Set up JDK 17
       uses: actions/setup-java@v4
@@ -20,13 +28,13 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
         cache: gradle
+        cache-dependency-path: app/build.gradle.kts
 
     - name: Pre-create secrets and local config
       run: |
         echo "sdk.dir=$ANDROID_HOME" > local.properties
         touch .env
         echo "GEMINI_API_KEY=mock_key_for_building_only" > .env
-        cp .env app/.env || true
 
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew

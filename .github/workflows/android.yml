@@ -34,15 +34,7 @@ jobs:
         echo "GEMINI_API_KEY=mock_key_for_building_only" > .env
         
         chmod +x gradlew
-        
-        # Gradle වලට බලෙන්ම Tests ඔක්කොම Disable කරන්න කියලා විධානය දෙනවා
-        ./gradlew assembleDebug \
-          -Pandroid.experimental.androidTest.minusEq=true \
-          -x test \
-          -x testDebugUnitTest \
-          -x testReleaseUnitTest \
-          -x connectedDebugAndroidTest \
-          --stacktrace
+        ./gradlew assembleDebug -x test --stacktrace
 
     - name: Upload APK
       uses: actions/upload-artifact@v4

@@ -23,24 +23,18 @@ jobs:
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v4
 
-    - name: Force Build Android APK
+    - name: Build Android APK
       run: |
         PROJECT_ROOT=$(find . -name "build.gradle.kts" -exec dirname {} \; | head -n 1)
         cd $PROJECT_ROOT
         
-        # Gradle wrapper එක හදනවා
         gradle wrapper
-        
-        # ප්ලගින් එකට රැවටෙන්න fake secrets සහ settings හදනවා
         echo "sdk.dir=$ANDROID_HOME" > local.properties
         touch .env
         echo "GEMINI_API_KEY=mock_key_for_building_only" > .env
-        touch secrets.properties || true
         
         chmod +x gradlew
-        
-        # Secrets ප්ලගින් එක මුළුමනින්ම bypass කරලා බිල්ඩ් එක දුවනවා
-        ./gradlew assembleDebug -Pandroid.defaults.buildfeatures.buildconfig=true -Dorg.gradle.project.ignoreErrors=true --stacktrace
+        ./gradlew assembleDebug --stacktrace
 
     - name: Upload APK
       uses: actions/upload-artifact@v4

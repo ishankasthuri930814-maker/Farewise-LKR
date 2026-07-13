@@ -21,11 +21,18 @@ jobs:
         distribution: 'temurin'
         cache: gradle
 
+    - name: Pre-create secrets and local config
+      run: |
+        echo "sdk.dir=$ANDROID_HOME" > local.properties
+        touch .env
+        echo "GEMINI_API_KEY=mock_key_for_building_only" > .env
+        cp .env app/.env || true
+
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
 
     - name: Build with Gradle
-      run: ./gradlew assembleDebug
+      run: ./gradlew assembleDebug --stacktrace
 
     - name: Upload APK
       uses: actions/upload-artifact@v4

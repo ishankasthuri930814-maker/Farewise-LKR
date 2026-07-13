@@ -23,15 +23,23 @@ jobs:
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v4
 
-    - name: Create local and secrets configuration
+    - name: Generate Gradle Wrapper and Build
       run: |
+        # Android project එක තියෙන ෆෝල්ඩරය සොයාගන්නවා
         PROJECT_ROOT=$(find . -name "build.gradle.kts" -exec dirname {} \; | head -n 1)
         cd $PROJECT_ROOT
+        
+        # නැතිවී තිබුණු gradlew ෆයිල් එක මෙතනින් auto-generate කරගන්නවා
+        gradle wrapper
+        
+        # රහස්‍ය ෆයිල් සහ local config ටික සකසනවා
         echo "sdk.dir=$ANDROID_HOME" > local.properties
         touch .env
         echo "GEMINI_API_KEY=mock_key_for_building_only" > .env
         
-        gradle assembleDebug --stacktrace
+        # දැන් අලුතින් හැදුණු gradlew එකට පර්මිෂන් දීලා බිල්ඩ් එක පටන් ගන්නවා
+        chmod +x gradlew
+        ./gradlew assembleDebug --stacktrace
 
     - name: Upload APK
       uses: actions/upload-artifact@v4

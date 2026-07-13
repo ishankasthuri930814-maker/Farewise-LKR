@@ -19,24 +19,22 @@ jobs:
       with:
         java-version: '17'
         distribution: 'temurin'
-        cache: gradle
 
-    - name: Find and Run Gradle Build
+    # Gradle Wrapper එක නැති නිසා අලුතින්ම Gradle පරිසරය සකසනවා
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@v4
+
+    - name: Create local and secrets configuration
       run: |
-        # gradlew ෆයිල් එක තියෙන තැන හොයාගෙන ඒ ෆෝල්ඩරය ඇතුළට යනවා
-        GRADLE_DIR=$(find . -name "gradlew" -exec dirname {} \;)
-        echo "Gradle found in: $GRADLE_DIR"
-        cd $GRADLE_DIR
-        
-        # රහස්‍ය ෆයිල් ටික කෘත්‍රිමව හදනවා
+        # project එක තියෙන තැන local.properties සහ .env හදනවා
+        PROJECT_ROOT=$(find . -name "build.gradle.kts" -exec dirname {} \; | head -n 1)
+        cd $PROJECT_ROOT
         echo "sdk.dir=$ANDROID_HOME" > local.properties
         touch .env
         echo "GEMINI_API_KEY=mock_key_for_building_only" > .env
-        cp .env app/.env || true
         
-        # පර්මිෂන් දීලා බිල්ඩ් එක රන් කරනවා
-        chmod +x gradlew
-        ./gradlew assembleDebug --stacktrace
+        # බිල්ඩ් එක කෙලින්ම ගෝලීය gradle විධානයෙන් දුවනවා (gradlew නැති නිසා)
+        gradle assembleDebug --stacktrace
 
     - name: Upload APK
       uses: actions/upload-artifact@v4

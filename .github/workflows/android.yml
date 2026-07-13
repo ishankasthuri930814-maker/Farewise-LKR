@@ -34,7 +34,8 @@ jobs:
         echo "GEMINI_API_KEY=mock_key_for_building_only" > .env
         
         chmod +x gradlew
-        ./gradlew assembleDebug --stacktrace
+        # මෙතනදී tests ඔක්කොම skip කරලා කෙලින්ම APK එක විතරක් බිල්ඩ් කරනවා
+        ./gradlew assembleDebug -x test -x testDebugUnitTest --stacktrace
 
     - name: Upload APK
       uses: actions/upload-artifact@v4

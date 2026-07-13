@@ -1,0 +1,6 @@
+{
+  "name": "FareWise LKR",
+  "description": "Calculates Earnings per KM in real-time for ride requests, presenting fares, distances, and profits as background overlay popups to help drivers make smart decisions.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

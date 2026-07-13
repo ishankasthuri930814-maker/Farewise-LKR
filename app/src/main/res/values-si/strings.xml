@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ෆෙයාර්වයිස් LKR</string>
+    <string name="title_dashboard">රියදුරු සහකරු</string>
+    <string name="lbl_earnings_per_km">කිලෝමීටරයකට ඉපැයීම</string>
+    <string name="lbl_total_fare">මුළු ගාස්තුව</string>
+    <string name="lbl_pickup_dist">පික්අප් දුර</string>
+    <string name="lbl_drop_dist">ඩ්‍රොප් දුර</string>
+    <string name="lbl_accept">පිළිගන්න</string>
+    <string name="lbl_reject">ප්‍රතික්ෂේප කරන්න</string>
+    <string name="accessibility_service_description">ස්වයංක්‍රීයව දුර සහ ගාස්තු ගණනය කිරීම සඳහා PickMe සහ Uber Driver තිරයන් විශ්ලේෂණය කරයි.</string>
+</resources>

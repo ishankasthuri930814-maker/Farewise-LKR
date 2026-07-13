@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">FareWise LKR</string>
+    <string name="title_dashboard">Driver Companion</string>
+    <string name="lbl_earnings_per_km">Earnings per KM</string>
+    <string name="lbl_total_fare">Total Fare</string>
+    <string name="lbl_pickup_dist">Pickup Distance</string>
+    <string name="lbl_drop_dist">Drop Distance</string>
+    <string name="lbl_accept">Accept</string>
+    <string name="lbl_reject">Reject</string>
+    <string name="accessibility_service_description">Analyzes PickMe and Uber Driver screens to calculate metrics automatically.</string>
+</resources>

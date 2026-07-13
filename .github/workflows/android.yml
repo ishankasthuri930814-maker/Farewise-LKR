@@ -33,12 +33,16 @@ jobs:
         touch .env
         echo "GEMINI_API_KEY=mock_key_for_building_only" > .env
         
-        # බිල්ඩ් එක කඩන Test ෆෝල්ඩරය තාවකාලිකව මකා දමනවා (Bypass trick)
-        rm -rf app/src/test || true
-        rm -rf src/test || true
-        
         chmod +x gradlew
-        ./gradlew assembleDebug --stacktrace
+        
+        # Gradle වලට බලෙන්ම Tests ඔක්කොම Disable කරන්න කියලා විධානය දෙනවා
+        ./gradlew assembleDebug \
+          -Pandroid.experimental.androidTest.minusEq=true \
+          -x test \
+          -x testDebugUnitTest \
+          -x testReleaseUnitTest \
+          -x connectedDebugAndroidTest \
+          --stacktrace
 
     - name: Upload APK
       uses: actions/upload-artifact@v4

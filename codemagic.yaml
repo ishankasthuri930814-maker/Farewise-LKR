@@ -16,6 +16,6 @@ workflows:
           wget -q https://services.gradle.org/distributions/gradle-9.3.1-bin.zip
           unzip -q gradle-9.3.1-bin.zip -d $HOME
           export PATH=$HOME/gradle-9.3.1/bin:$PATH
-          gradle assembleRelease -x lint -x lintVitalRelease
+          gradle assembleDebug
     artifacts:
       - app/build/outputs/apk/**/*.apk

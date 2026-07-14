@@ -11,8 +11,14 @@ workflows:
       - name: Set up local.properties
         script: |
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
+      - name: Upgrade Gradle Version
+        script: |
+          wget https://services.gradle.org/distributions/gradle-9.3.1-bin.zip
+          unzip -d /opt gradle-9.3.1-bin.zip
+          export PATH=/opt/gradle-9.3.1/bin:$PATH
       - name: Build Android Release APK
         script: |
+          export PATH=/opt/gradle-9.3.1/bin:$PATH
           gradle assembleRelease
     artifacts:
       - app/build/outputs/apk/**/*.apk

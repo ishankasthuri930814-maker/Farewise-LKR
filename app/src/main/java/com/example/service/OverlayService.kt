@@ -504,7 +504,7 @@ fun OverlayCard(
             .fillMaxWidth()
             .padding(horizontal = 10.dp, vertical = 2.dp)
             .border(1.dp, rateColor.copy(alpha = 0.45f), RoundedCornerShape(12.dp)),
-        colors = CardDefaults.cardColors(containerColor = CyberSurface.copy(alpha = 0.58f)),
+        colors = CardDefaults.cardColors(containerColor = CyberSurface.copy(alpha = 0.95f)),
         shape = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
     ) {
@@ -527,15 +527,15 @@ fun OverlayCard(
                         imageVector = Icons.Default.PlayArrow,
                         contentDescription = "Ride",
                         tint = CyberSecondary,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(12.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = if (isSinhala) "නව හයර් පණිවිඩයකි" else "NEW RIDE ALERT",
                         style = MaterialTheme.typography.titleSmall.copy(
                             fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            letterSpacing = 0.5.sp
+                            fontSize = 10.sp,
+                            letterSpacing = 0.3.sp
                         ),
                         color = Color.White
                     )
@@ -549,13 +549,13 @@ fun OverlayCard(
                     Box(
                         modifier = Modifier
                             .background(rateColor.copy(alpha = 0.25f), RoundedCornerShape(6.dp))
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                            .padding(horizontal = 4.dp, vertical = 1.dp)
                     ) {
                         Text(
                             text = rateLabel,
                             style = MaterialTheme.typography.labelSmall.copy(
                                 fontWeight = FontWeight.ExtraBold,
-                                fontSize = 9.sp
+                                fontSize = 8.sp
                             ),
                             color = rateColor
                         )
@@ -564,13 +564,13 @@ fun OverlayCard(
                     // Compact Close Button
                     IconButton(
                         onClick = onClose,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(20.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = "Close",
                             tint = Color.Gray,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(12.dp)
                         )
                     }
                 }
@@ -590,13 +590,14 @@ fun OverlayCard(
                 Column {
                     Text(
                         text = if (isSinhala) "කිලෝමීටරයකට ඉපැයීම" else "EARNINGS PER KM",
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
                         color = Color.Gray
                     )
                     Text(
                         text = "Rs. ${df.format(epk)}/km",
                         style = MaterialTheme.typography.titleLarge.copy(
-                            fontWeight = FontWeight.Black
+                            fontWeight = FontWeight.Black,
+                            fontSize = 28.sp
                         ),
                         color = rateColor
                     )
@@ -605,15 +606,16 @@ fun OverlayCard(
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
                         text = if (isSinhala) "මුළු ගාස්තුව" else "TOTAL FARE",
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
                         color = Color.Gray
                     )
                     Text(
                         text = "Rs. ${request.totalFare}",
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.Bold
+                        style = MaterialTheme.typography.titleSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
                         ),
-                        color = Color.White
+                        color = Color.LightGray
                     )
                 }
             }
@@ -631,18 +633,18 @@ fun OverlayCard(
                         imageVector = Icons.Default.Info,
                         contentDescription = null,
                         tint = CyberSecondary,
-                        modifier = Modifier.size(12.dp)
+                        modifier = Modifier.size(10.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = if (isSinhala) "ගමන් විස්තරය" else "Fare Calculation Info",
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
                         color = Color.Gray
                     )
                 }
                 Text(
                     text = if (isSinhala) "මුළු දුර: ${df.format(totalDist)} km" else "Total Dist: ${df.format(totalDist)} km",
-                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold, fontSize = 11.sp),
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 9.sp),
                     color = CyberSecondary
                 )
             }

@@ -12,7 +12,15 @@ class RideAccessibilityService : AccessibilityService() {
     private var lastParsedFare = 0.0
     private var lastParsedDistance = 0.0
     private var lastParseTime = 0L
-    private var lastContentProcessTime = 0L
+
+    private val debounceHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var pendingRunnable: Runnable? = null
+
+    override fun onDestroy() {
+        pendingRunnable?.let { debounceHandler.removeCallbacks(it) }
+        pendingRunnable = null
+        super.onDestroy()
+    }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         val prefs = getSharedPreferences("farewise_prefs", Context.MODE_PRIVATE)
@@ -25,17 +33,37 @@ class RideAccessibilityService : AccessibilityService() {
             return
         }
 
-        // Throttle TYPE_WINDOW_CONTENT_CHANGED to avoid overloading the main thread and causing delay
         val eventType = event.eventType
-        val now = System.currentTimeMillis()
-        if (eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
-            if (now - lastContentProcessTime < 150) {
-                return
+
+        // Trigger immediately on state change for absolute maximum speed
+        if (eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            pendingRunnable?.let { debounceHandler.removeCallbacks(it) }
+            pendingRunnable = null
+            processCurrentScreen()
+        }
+        // Debounce content changes to collect multi-pass rendering updates before parsing (ensures we get the final loaded state)
+        else if (eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
+            pendingRunnable?.let { debounceHandler.removeCallbacks(it) }
+            val runnable = Runnable {
+                processCurrentScreen()
             }
-            lastContentProcessTime = now
+            pendingRunnable = runnable
+            debounceHandler.postDelayed(runnable, 50) // 50ms is imperceptible but highly effective
+        }
+    }
+
+    private fun processCurrentScreen() {
+        val prefs = getSharedPreferences("farewise_prefs", Context.MODE_PRIVATE)
+        val isServiceEnabled = prefs.getBoolean("service_enabled", false)
+        if (!isServiceEnabled) {
+            return
         }
 
-        // Inspect all active interactive windows to be extremely robust when other apps (like Google Maps or shortcuts) are in the foreground
+        if (com.example.MainActivity.isAppInForeground) {
+            return
+        }
+
+        // Inspect all active interactive windows to be extremely robust when other apps are in the foreground
         val activeWindows = windows
         var processedTargetWindow = false
         if (!activeWindows.isNullOrEmpty()) {
@@ -78,18 +106,13 @@ class RideAccessibilityService : AccessibilityService() {
         }
 
         if (!processedTargetWindow) {
-            val rootNode = getActualRootNode(event) ?: return
-            
-            val eventPackage = event.packageName?.toString() ?: ""
+            val rootNode = rootInActiveWindow ?: return
             val rootPackage = rootNode.packageName?.toString() ?: ""
             
-            if (eventPackage == packageName || rootPackage == packageName || 
-                eventPackage.contains("com.example") || rootPackage.contains("com.example") ||
-                eventPackage.contains("aistudio") || rootPackage.contains("aistudio")) {
+            if (rootPackage == packageName || rootPackage.contains("com.example") || rootPackage.contains("aistudio")) {
                 return
             }
             
-            val evPkgLower = eventPackage.lowercase()
             val rtPkgLower = rootPackage.lowercase()
             
             try {
@@ -109,16 +132,15 @@ class RideAccessibilityService : AccessibilityService() {
                     }
 
                     // Robust app matching: Check package name or if the screen content has strong ride-sharing app keywords
-                    val isUber = evPkgLower.contains("uber") || evPkgLower.contains("ubercab") || 
-                                 rtPkgLower.contains("uber") || rtPkgLower.contains("ubercab") ||
+                    val isUber = rtPkgLower.contains("uber") || rtPkgLower.contains("ubercab") ||
                                  fullScreenTextLower.contains("uber")
 
-                    val isPickMe = evPkgLower.contains("pickme") || rtPkgLower.contains("pickme") ||
-                                   evPkgLower.contains("bhasha") || rtPkgLower.contains("bhasha") ||
+                    val isPickMe = rtPkgLower.contains("pickme") ||
+                                   rtPkgLower.contains("bhasha") ||
                                    fullScreenTextLower.contains("pickme") || fullScreenTextLower.contains("වාරිකාව")
 
                     if (isUber || isPickMe) {
-                        Log.d("RideAccessibilityService", "Detected ride app on screen. Package=$rootPackage, eventPackage=$eventPackage. Extracted text list size=${textList.size}")
+                        Log.d("RideAccessibilityService", "Detected ride app on screen. Package=$rootPackage. Extracted text list size=${textList.size}")
                         parseScreenContent(textList, fullScreenText)
                     }
                 }
@@ -219,9 +241,8 @@ class RideAccessibilityService : AccessibilityService() {
 
     private fun extractFareFromString(rawStr: String): Double {
         val strClean = rawStr.replace(",", "").replace('\u00A0', ' ').trim()
-        val currencySymbols = "(?:LKR\\.?|Rs\\.?|RS\\.?|rs\\.?|රු\\.?|රුපියල්\\.?|ரூ\\.?)"
-        val prefixFareRegex = Regex("$currencySymbols\\s*([\\d.]+)", RegexOption.IGNORE_CASE)
-        val suffixFareRegex = Regex("([\\d.]+)\\s*(?:$currencySymbols|/=)", RegexOption.IGNORE_CASE)
+        val prefixFareRegex = Regex("(?:LKR|Rs|RS|rs|රු|රුපියල්|ரூ)\\s*\\.?\\s*([\\d.]+)", RegexOption.IGNORE_CASE)
+        val suffixFareRegex = Regex("([\\d.]+)\\s*\\.?\\s*(?:LKR|Rs|RS|rs|රු|රුපියල්|ரூ|/=)", RegexOption.IGNORE_CASE)
 
         val prefixMatch = prefixFareRegex.find(strClean)
         if (prefixMatch != null) {
@@ -372,13 +393,13 @@ class RideAccessibilityService : AccessibilityService() {
         val textNoCommas = cleanText.replace(",", "")
         
         // Number-First patterns
-        val kmRegex = Regex("([\\d.]+)\\s*(?:km|kilometers|කි\\.\\s*මී\\.|කිමී|කිලෝමීටර්|කිලෝ\\s*මීටර්|කிலோமீட்டர்|கி\\.மீ)", RegexOption.IGNORE_CASE)
+        val kmRegex = Regex("([\\d.]+)\\s*(?:km|kilometers|කි\\.?\\s*මී\\.?|කිලෝමීටර්|කිලෝ\\s*මීටර්|කிலோமீட்டர்|கி\\.மீ)", RegexOption.IGNORE_CASE)
         val meterRegex = Regex("([\\d.]+)\\s*(?:meters|මීටර්|මී|மீட்டர்|மீ)\\b", RegexOption.IGNORE_CASE)
         val standaloneMRegex = Regex("([\\d.]+)\\s*\\bm\\b", RegexOption.IGNORE_CASE)
         val miRegex = Regex("([\\d.]+)\\s*(?:mi|mile|miles)\\b", RegexOption.IGNORE_CASE)
 
         // Unit-First patterns (very common in Sinhala e.g. කි.මී. 1.8ක්, විනාඩි 1ක්)
-        val kmUnitFirstRegex = Regex("(?:කි\\.\\s*මී\\.|කිමී|කිලෝමීටර්|කිලෝ\\s*මීටර්|කிலோமீட்டர்|கி\\.மீ)\\s*([\\d.]+)(?:ක්)?", RegexOption.IGNORE_CASE)
+        val kmUnitFirstRegex = Regex("(?:කි\\.?\\s*මී\\.?|කිලෝමීටර්|කිලෝ\\s*මීටර්|கிலோமீட்டர்|கி\\.மீ)\\s*([\\d.]+)(?:ක්)?", RegexOption.IGNORE_CASE)
         val meterUnitFirstRegex = Regex("(?:මීටර්|මී|மீட்டர்|மீ)\\s*([\\d.]+)(?:ක්)?", RegexOption.IGNORE_CASE)
 
         // Parse Number-First Kilometers
@@ -529,7 +550,8 @@ class RideAccessibilityService : AccessibilityService() {
             "google", "map", "සිතියම", "profile", "image", "url", "icon", "button", "switch", "avatar", "menu", "search", "ස්ථාන", 
             "මුල් පිටුව", "home", "අද", "today", "yesterday", "tomorrow", "earnings", "ඉපැයීම්", "wallet", "පසුම්බිය", "incentive", 
             "incentives", "ලොග්", "log", "status", "තත්ත්වය", "history", "ඉතිහාසය",
-            "ගෙවීම්", "ගෙවීම", "මුදලින්", "cash", "card", "pay", "payment"
+            "ගෙවීම්", "ගෙවීම", "මුදලින්", "cash", "card", "pay", "payment",
+            "ගැලපීම", "ගැලපීම්", "ගැළපීම", "ගැළපීම්"
         )
 
         for (rawStr in textList) {

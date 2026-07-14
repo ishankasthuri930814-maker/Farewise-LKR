@@ -1789,6 +1789,14 @@ fun DriverDashboardScreen(viewModel: MainViewModel) {
                                     if (appLanguage == AppLanguage.SINHALA) "පිටකොටුව රතු පල්ලිය" else "Pettah Red Mosque",
                                     if (appLanguage == AppLanguage.SINHALA) "ලිබර්ටි ප්ලාසා" else "Liberty Plaza"
                                 )
+                            ),
+                            Triple(
+                                if (appLanguage == AppLanguage.SINHALA) "Uber Tuk (තිර පිටපත)" else "Uber Tuk (Screenshot Match)",
+                                Triple(420.0, 0.4, 2.4),
+                                Pair(
+                                    "Kalutara North, Station Road, KT1 2GC, Wadduwa",
+                                    if (appLanguage == AppLanguage.SINHALA) "Cyril Road, Cyril Rd, වාද්දුව" else "Cyril Road, Cyril Rd, Wadduwa"
+                                )
                             )
                         )
 

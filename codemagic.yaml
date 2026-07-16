@@ -1,0 +1,24 @@
+workflows:
+  android-workflow:
+    name: Android Release Build
+    max_build_duration: 60
+    instance_type: mac_mini_m1
+    environment:
+      groups:
+        - android_ndk
+      java: 17
+    scripts:
+      - name: Set up local.properties
+        script: |
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
+      - name: Generate Dummy Keystore
+        script: |
+          keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+      - name: Download and Use Gradle 9.3.1
+        script: |
+          wget -q https://services.gradle.org/distributions/gradle-9.3.1-bin.zip
+          unzip -q gradle-9.3.1-bin.zip -d $HOME
+          export PATH=$HOME/gradle-9.3.1/bin:$PATH
+          gradle assembleDebug
+    artifacts:
+      - app/build/outputs/apk/**/*.apk

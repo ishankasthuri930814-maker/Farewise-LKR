@@ -869,14 +869,28 @@ fun DriverDashboardScreen(viewModel: MainViewModel) {
                         }
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
-                            Text(
-                                text = getTxt("title", appLanguage),
-                                style = MaterialTheme.typography.titleLarge.copy(
-                                    fontWeight = FontWeight.Black,
-                                    letterSpacing = 0.5.sp
-                                ),
-                                color = Color.White
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = getTxt("title", appLanguage),
+                                    style = MaterialTheme.typography.titleLarge.copy(
+                                        fontWeight = FontWeight.Black,
+                                        letterSpacing = 0.5.sp
+                                    ),
+                                    color = Color.White
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "2.0",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                    color = CyberPrimary,
+                                    modifier = Modifier
+                                        .background(CyberPrimary.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                                )
+                            }
                             Text(
                                 text = getTxt("subtitle", appLanguage),
                                 style = MaterialTheme.typography.labelSmall,

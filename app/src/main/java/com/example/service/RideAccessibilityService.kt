@@ -30,42 +30,65 @@ class RideAccessibilityService : AccessibilityService() {
             return
         }
 
-        if (com.example.MainActivity.isAppInForeground) {
-            return
-        }
-
         // Track the package name of the active app that triggered the event, excluding our own app and system layers
         val pkg = event.packageName?.toString()?.lowercase() ?: ""
-        if (pkg.isNotEmpty() && !pkg.contains("com.example") && !pkg.contains("aistudio") && !pkg.contains("systemui") && pkg != "android") {
+        if (pkg.isNotEmpty() && !pkg.contains("com.example") && !pkg.contains("aistudio") && !pkg.contains("systemui") && pkg != "android" && !pkg.contains("launcher")) {
             lastActivePackage = pkg
         }
 
-        val eventType = event.eventType
-
-        if (eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
-            // Process instantly on screen changes for ultimate response time
-            pendingRunnable?.let { debounceHandler.removeCallbacks(it) }
-            pendingRunnable = null
+        // Debounce content changes from ALL events to collect multi-pass rendering updates before parsing (ensures we get the final loaded state)
+        pendingRunnable?.let { debounceHandler.removeCallbacks(it) }
+        val runnable = Runnable {
             processCurrentScreen()
-        } else if (eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
-            // Debounce content changes to collect multi-pass rendering updates before parsing (ensures we get the final loaded state)
-            pendingRunnable?.let { debounceHandler.removeCallbacks(it) }
-            val runnable = Runnable {
-                processCurrentScreen()
-            }
-            pendingRunnable = runnable
-            debounceHandler.postDelayed(runnable, 80) // 80ms is imperceptible but highly effective at letting layouts populate
         }
+        pendingRunnable = runnable
+        debounceHandler.postDelayed(runnable, 60) // 60ms is extremely responsive but debounces fast rendering passes
+    }
+
+    private fun isSystemOrKeyboardOrLauncher(pkg: String): Boolean {
+        val lower = pkg.lowercase()
+        return lower.contains("systemui") || 
+               lower == "android" || 
+               lower.contains("launcher") || 
+               lower.contains("inputmethod") || 
+               lower.contains("keyboard") ||
+               lower.contains("googlequicksearchbox")
+    }
+
+    private fun isRideSharingAppOrScreen(pkg: String, activePkg: String, fullScreenTextLower: String): Boolean {
+        val rideKeywords = listOf(
+            "uber", "pickme", "indrive", "bhasha", "yandex", "bolt", "grab", "didiglobal",
+            "වාරිකය", "වාරිකාව", "සවාරිය", "සවාරි", "ලබාගන්න", "පිළිගන්න", "පිලිගන්න", 
+            "ප්‍රතික්ෂේප", "ප්‍රතික්‍ෂේප", "ප්රතික්ෂේප", "නව සවාරිය", "new ride", 
+            "trip radar", "accept ride", "accept?", "ride request", "matching trip",
+            "earnings per km", "total fare", "pickup", "dropoff"
+        )
+        
+        // If package or active package contains any ride-sharing signature
+        val lowPkg = pkg.lowercase()
+        val lowActive = activePkg.lowercase()
+        
+        if (lowPkg.contains("uber") || lowPkg.contains("pickme") || lowPkg.contains("indrive") || lowPkg.contains("bhasha") || lowPkg.contains("yandex") || lowPkg.contains("bolt") || lowPkg.contains("grab")) {
+            return true
+        }
+        if (lowActive.contains("uber") || lowActive.contains("pickme") || lowActive.contains("indrive") || lowActive.contains("bhasha") || lowActive.contains("yandex") || lowActive.contains("bolt") || lowActive.contains("grab")) {
+            return true
+        }
+        
+        // If the screen text contains any of the ride-related keywords
+        for (keyword in rideKeywords) {
+            if (fullScreenTextLower.contains(keyword)) {
+                return true
+            }
+        }
+        
+        return false
     }
 
     private fun processCurrentScreen() {
         val prefs = getSharedPreferences("farewise_prefs", Context.MODE_PRIVATE)
         val isServiceEnabled = prefs.getBoolean("service_enabled", false)
         if (!isServiceEnabled) {
-            return
-        }
-
-        if (com.example.MainActivity.isAppInForeground) {
             return
         }
 
@@ -79,8 +102,8 @@ class RideAccessibilityService : AccessibilityService() {
                 val root = window.root ?: continue
                 val pkg = root.packageName?.toString()?.lowercase() ?: ""
                 
-                // Skip our own app
-                if (pkg == packageName || pkg.contains("com.example") || pkg.contains("aistudio")) {
+                // Skip our own app and system layers
+                if (pkg == packageName || pkg.contains("com.example") || pkg.contains("aistudio") || isSystemOrKeyboardOrLauncher(pkg)) {
                     continue
                 }
                 
@@ -91,20 +114,15 @@ class RideAccessibilityService : AccessibilityService() {
                         val fullScreenText = textList.joinToString(" ")
                         val fullScreenTextLower = fullScreenText.lowercase()
                         
-                        // Check if the current window, last active package, or screen content matches Uber/PickMe
-                        val isUber = pkg.contains("uber") || pkg.contains("ubercab") || 
-                                     activePkg.contains("uber") || activePkg.contains("ubercab") ||
-                                     fullScreenTextLower.contains("uber")
-                        val isPickMe = pkg.contains("pickme") || pkg.contains("bhasha") || 
-                                       activePkg.contains("pickme") || activePkg.contains("bhasha") ||
-                                       fullScreenTextLower.contains("pickme") || fullScreenTextLower.contains("වාරිකාව") || fullScreenTextLower.contains("වාරිකය")
-                        
-                        val isOurApp = fullScreenTextLower.contains("welcome riders") || 
-                                       fullScreenTextLower.contains("permission enable කිරීමට") ||
-                                       fullScreenTextLower.contains("gps meter") ||
-                                       fullScreenTextLower.contains("farewise")
+                        // Prevent parsing our own app screens
+                        if (fullScreenTextLower.contains("welcome riders") || 
+                            fullScreenTextLower.contains("permission enable කිරීමට") ||
+                            fullScreenTextLower.contains("gps meter") ||
+                            fullScreenTextLower.contains("farewise")) {
+                            continue
+                        }
 
-                        if (!isOurApp && (isUber || isPickMe)) {
+                        if (isRideSharingAppOrScreen(pkg, activePkg, fullScreenTextLower)) {
                             Log.d("RideAccessibilityService", "Detected ride app in active window: pkg=$pkg, activePkg=$activePkg. Extracted text size=${textList.size}")
                             parseScreenContent(textList, fullScreenText)
                             processedTargetWindow = true
@@ -122,7 +140,7 @@ class RideAccessibilityService : AccessibilityService() {
             val rootNode = rootInActiveWindow ?: return
             val rootPackage = rootNode.packageName?.toString()?.lowercase() ?: ""
             
-            if (rootPackage == packageName || rootPackage.contains("com.example") || rootPackage.contains("aistudio")) {
+            if (rootPackage == packageName || rootPackage.contains("com.example") || rootPackage.contains("aistudio") || isSystemOrKeyboardOrLauncher(rootPackage)) {
                 return
             }
             
@@ -141,15 +159,7 @@ class RideAccessibilityService : AccessibilityService() {
                         return
                     }
 
-                    val isUber = rootPackage.contains("uber") || rootPackage.contains("ubercab") ||
-                                 activePkg.contains("uber") || activePkg.contains("ubercab") ||
-                                 fullScreenTextLower.contains("uber")
-
-                    val isPickMe = rootPackage.contains("pickme") || rootPackage.contains("bhasha") ||
-                                   activePkg.contains("pickme") || activePkg.contains("bhasha") ||
-                                   fullScreenTextLower.contains("pickme") || fullScreenTextLower.contains("වාරිකාව") || fullScreenTextLower.contains("වාරිකය")
-
-                    if (isUber || isPickMe) {
+                    if (isRideSharingAppOrScreen(rootPackage, activePkg, fullScreenTextLower)) {
                         Log.d("RideAccessibilityService", "Detected ride app in rootInActiveWindow. Package=$rootPackage, activePkg=$activePkg. Extracted text list size=${textList.size}")
                         parseScreenContent(textList, fullScreenText)
                     }
@@ -488,27 +498,29 @@ class RideAccessibilityService : AccessibilityService() {
 
         // We trigger if:
         // 1. We have a valid parsed fare AND
-        // 2. We are confident it is an active offer (either we have active offer keywords on screen, OR we have a valid non-zero travel distance on screen and no history indicators)
+        // 2. We are confident it is not a historical log or receipt screen
         var shouldTrigger = false
         if (parsedFare > 0.0) {
             val hasHistoryIndicators = rawTextLower.contains("history") || 
                                        rawTextLower.contains("ඉතිහාසය") || 
-                                       rawTextLower.contains("summary") || 
-                                       rawTextLower.contains("විස්තර") || 
-                                       rawTextLower.contains("details") ||
+                                       rawTextLower.contains("past trips") ||
+                                       rawTextLower.contains("past ride") ||
+                                       rawTextLower.contains("past hire") ||
                                        rawTextLower.contains("පසුගිය") ||
-                                       rawTextLower.contains("past trips")
+                                       rawTextLower.contains("receipt") ||
+                                       rawTextLower.contains("invoice") ||
+                                       rawTextLower.contains("completed") ||
+                                       rawTextLower.contains("ended") ||
+                                       rawTextLower.contains("delivered") ||
+                                       rawTextLower.contains("ගෙවන ලදී") ||
+                                       rawTextLower.contains("ගෙවනලදී") ||
+                                       rawTextLower.contains("paid")
 
             if (hasHistoryIndicators) {
-                Log.d("RideAccessibilityService", "Ignoring fare $parsedFare because it looks like a history/summary screen.")
-            } else if (hasActiveOffer) {
-                shouldTrigger = true
-                Log.d("RideAccessibilityService", "Triggering because we found active offer keywords and fare $parsedFare.")
-            } else if (totalDistance > 0.0) {
-                shouldTrigger = true
-                Log.d("RideAccessibilityService", "Triggering because we found travel distance $totalDistance and fare $parsedFare.")
+                Log.d("RideAccessibilityService", "Ignoring fare $parsedFare because it looks like a history/summary/receipt screen.")
             } else {
-                Log.d("RideAccessibilityService", "Ignoring fare $parsedFare: No travel distance and no active offer keywords found.")
+                shouldTrigger = true
+                Log.d("RideAccessibilityService", "Triggering overlay because we successfully extracted a valid ride fare of LKR $parsedFare.")
             }
         }
 

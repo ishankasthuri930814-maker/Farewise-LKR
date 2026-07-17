@@ -36,13 +36,94 @@ class RideAccessibilityService : AccessibilityService() {
             lastActivePackage = pkg
         }
 
-        // Debounce content changes from ALL events to collect multi-pass rendering updates before parsing (ensures we get the final loaded state)
-        pendingRunnable?.let { debounceHandler.removeCallbacks(it) }
-        val runnable = Runnable {
-            processCurrentScreen()
+        // Extract text from the active screen synchronously before the nodes can be recycled by the OS
+        val textList = extractTextsFromAllSources(event)
+        if (textList.isEmpty()) {
+            return
         }
-        pendingRunnable = runnable
-        debounceHandler.postDelayed(runnable, 60) // 60ms is extremely responsive but debounces fast rendering passes
+
+        val fullScreenText = textList.joinToString(" ")
+        val fullScreenTextLower = fullScreenText.lowercase()
+
+        // Prevent parsing our own app screens to avoid circular overlay triggering loops
+        if (fullScreenTextLower.contains("welcome riders") || 
+            fullScreenTextLower.contains("permission enable කිරීමට") ||
+            fullScreenTextLower.contains("gps meter") ||
+            fullScreenTextLower.contains("farewise")) {
+            return
+        }
+
+        // Determine target package name of the active ride app
+        val activePkg = lastActivePackage
+        var targetPkg = pkg
+        if (targetPkg.isEmpty() || isSystemOrKeyboardOrLauncher(targetPkg)) {
+            targetPkg = activePkg
+        }
+
+        // Parse and check if this matches a ride sharing app or offer screen
+        if (isRideSharingAppOrScreen(targetPkg, activePkg, fullScreenTextLower)) {
+            Log.d("RideAccessibilityService", "Synchronously detected ride app: pkg=$targetPkg, activePkg=$activePkg. Extracted texts count=${textList.size}")
+            parseScreenContent(textList, fullScreenText)
+        }
+    }
+
+    private fun extractTextsFromAllSources(event: AccessibilityEvent): List<String> {
+        val textList = mutableListOf<String>()
+
+        // 1. Try extracting from event.source (extremely local and fresh, direct from the triggering layout)
+        try {
+            val sourceNode = event.source
+            if (sourceNode != null) {
+                findTextsInNode(sourceNode, textList)
+            }
+        } catch (e: Exception) {
+            Log.e("RideAccessibilityService", "Error extracting text from event.source", e)
+        }
+
+        // 2. Try extracting from rootInActiveWindow (overall active screen tree)
+        try {
+            val rootNode = rootInActiveWindow
+            if (rootNode != null) {
+                val rootPackage = rootNode.packageName?.toString()?.lowercase() ?: ""
+                // Skip only our own app
+                if (rootPackage != packageName && !rootPackage.contains("com.example") && !rootPackage.contains("aistudio")) {
+                    val localList = mutableListOf<String>()
+                    findTextsInNode(rootNode, localList)
+                    for (txt in localList) {
+                        if (!textList.contains(txt)) {
+                            textList.add(txt)
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("RideAccessibilityService", "Error extracting text from rootInActiveWindow", e)
+        }
+
+        // 3. Try extracting from active windows (useful on devices with multi-window / interactive overlays)
+        try {
+            val activeWindows = windows
+            if (!activeWindows.isNullOrEmpty()) {
+                for (window in activeWindows) {
+                    val root = window.root ?: continue
+                    val pkg = root.packageName?.toString()?.lowercase() ?: ""
+                    if (pkg == packageName || pkg.contains("com.example") || pkg.contains("aistudio")) {
+                        continue
+                    }
+                    val localList = mutableListOf<String>()
+                    findTextsInNode(root, localList)
+                    for (txt in localList) {
+                        if (!textList.contains(txt)) {
+                            textList.add(txt)
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("RideAccessibilityService", "Error extracting text from windows list", e)
+        }
+
+        return textList
     }
 
     private fun isSystemOrKeyboardOrLauncher(pkg: String): Boolean {
@@ -56,118 +137,17 @@ class RideAccessibilityService : AccessibilityService() {
     }
 
     private fun isRideSharingAppOrScreen(pkg: String, activePkg: String, fullScreenTextLower: String): Boolean {
-        val rideKeywords = listOf(
-            "uber", "pickme", "indrive", "bhasha", "yandex", "bolt", "grab", "didiglobal",
-            "වාරිකය", "වාරිකාව", "සවාරිය", "සවාරි", "ලබාගන්න", "පිළිගන්න", "පිලිගන්න", 
-            "ප්‍රතික්ෂේප", "ප්‍රතික්‍ෂේප", "ප්රතික්ෂේප", "නව සවාරිය", "new ride", 
-            "trip radar", "accept ride", "accept?", "ride request", "matching trip",
-            "earnings per km", "total fare", "pickup", "dropoff"
-        )
-        
-        // If package or active package contains any ride-sharing signature
         val lowPkg = pkg.lowercase()
         val lowActive = activePkg.lowercase()
         
-        if (lowPkg.contains("uber") || lowPkg.contains("pickme") || lowPkg.contains("indrive") || lowPkg.contains("bhasha") || lowPkg.contains("yandex") || lowPkg.contains("bolt") || lowPkg.contains("grab")) {
-            return true
-        }
-        if (lowActive.contains("uber") || lowActive.contains("pickme") || lowActive.contains("indrive") || lowActive.contains("bhasha") || lowActive.contains("yandex") || lowActive.contains("bolt") || lowActive.contains("grab")) {
-            return true
-        }
-        
-        // If the screen text contains any of the ride-related keywords
-        for (keyword in rideKeywords) {
-            if (fullScreenTextLower.contains(keyword)) {
-                return true
-            }
+        // Skip our own app screens
+        if (lowPkg.contains("com.example") || lowPkg.contains("aistudio") || 
+            lowActive.contains("com.example") || lowActive.contains("aistudio")) {
+            return false
         }
         
-        return false
-    }
-
-    private fun processCurrentScreen() {
-        val prefs = getSharedPreferences("farewise_prefs", Context.MODE_PRIVATE)
-        val isServiceEnabled = prefs.getBoolean("service_enabled", false)
-        if (!isServiceEnabled) {
-            return
-        }
-
-        val activePkg = lastActivePackage
-
-        // 1. Inspect all active interactive windows (highly robust when other apps are in the foreground)
-        val activeWindows = windows
-        var processedTargetWindow = false
-        if (!activeWindows.isNullOrEmpty()) {
-            for (window in activeWindows) {
-                val root = window.root ?: continue
-                val pkg = root.packageName?.toString()?.lowercase() ?: ""
-                
-                // Skip our own app and system layers
-                if (pkg == packageName || pkg.contains("com.example") || pkg.contains("aistudio") || isSystemOrKeyboardOrLauncher(pkg)) {
-                    continue
-                }
-                
-                try {
-                    val textList = mutableListOf<String>()
-                    findTextsInNode(root, textList)
-                    if (textList.isNotEmpty()) {
-                        val fullScreenText = textList.joinToString(" ")
-                        val fullScreenTextLower = fullScreenText.lowercase()
-                        
-                        // Prevent parsing our own app screens
-                        if (fullScreenTextLower.contains("welcome riders") || 
-                            fullScreenTextLower.contains("permission enable කිරීමට") ||
-                            fullScreenTextLower.contains("gps meter") ||
-                            fullScreenTextLower.contains("farewise")) {
-                            continue
-                        }
-
-                        if (isRideSharingAppOrScreen(pkg, activePkg, fullScreenTextLower)) {
-                            Log.d("RideAccessibilityService", "Detected ride app in active window: pkg=$pkg, activePkg=$activePkg. Extracted text size=${textList.size}")
-                            parseScreenContent(textList, fullScreenText)
-                            processedTargetWindow = true
-                            break
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.e("RideAccessibilityService", "Error traversing active window: $pkg", e)
-                }
-            }
-        }
-
-        // 2. Fallback to using rootInActiveWindow
-        if (!processedTargetWindow) {
-            val rootNode = rootInActiveWindow ?: return
-            val rootPackage = rootNode.packageName?.toString()?.lowercase() ?: ""
-            
-            if (rootPackage == packageName || rootPackage.contains("com.example") || rootPackage.contains("aistudio") || isSystemOrKeyboardOrLauncher(rootPackage)) {
-                return
-            }
-            
-            try {
-                val textList = mutableListOf<String>()
-                findTextsInNode(rootNode, textList)
-                if (textList.isNotEmpty()) {
-                    val fullScreenText = textList.joinToString(" ")
-                    val fullScreenTextLower = fullScreenText.lowercase()
-
-                    // Prevent parsing our own app screens
-                    if (fullScreenTextLower.contains("welcome riders") || 
-                        fullScreenTextLower.contains("permission enable කිරීමට") ||
-                        fullScreenTextLower.contains("gps meter") ||
-                        fullScreenTextLower.contains("farewise")) {
-                        return
-                    }
-
-                    if (isRideSharingAppOrScreen(rootPackage, activePkg, fullScreenTextLower)) {
-                        Log.d("RideAccessibilityService", "Detected ride app in rootInActiveWindow. Package=$rootPackage, activePkg=$activePkg. Extracted text list size=${textList.size}")
-                        parseScreenContent(textList, fullScreenText)
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e("RideAccessibilityService", "Error traversing rootInActiveWindow", e)
-            }
-        }
+        // Allow all other apps so any ride request popup on any app/dialog is successfully parsed!
+        return true
     }
 
     private fun findTextsInNode(node: AccessibilityNodeInfo?, list: MutableList<String>) {
@@ -498,7 +478,8 @@ class RideAccessibilityService : AccessibilityService() {
 
         // We trigger if:
         // 1. We have a valid parsed fare AND
-        // 2. We are confident it is not a historical log or receipt screen
+        // 2. We are confident it is not a historical log or receipt screen AND
+        // 3. We find some ride-related context (either a distance or ride-sharing keywords) to avoid non-ride apps
         var shouldTrigger = false
         if (parsedFare > 0.0) {
             val hasHistoryIndicators = rawTextLower.contains("history") || 
@@ -519,8 +500,45 @@ class RideAccessibilityService : AccessibilityService() {
             if (hasHistoryIndicators) {
                 Log.d("RideAccessibilityService", "Ignoring fare $parsedFare because it looks like a history/summary/receipt screen.")
             } else {
-                shouldTrigger = true
-                Log.d("RideAccessibilityService", "Triggering overlay because we successfully extracted a valid ride fare of LKR $parsedFare.")
+                // Check for distance, travel terms, or ride action keywords to confirm it's a ride-related layout/dialog
+                val hasRideContext = totalDistance > 0.0 ||
+                                     rawTextLower.contains("accept") || 
+                                     rawTextLower.contains("decline") || 
+                                     rawTextLower.contains("reject") || 
+                                     rawTextLower.contains("cancel") || 
+                                     rawTextLower.contains("trip") || 
+                                     rawTextLower.contains("ride") || 
+                                     rawTextLower.contains("hire") || 
+                                     rawTextLower.contains("radar") ||
+                                     rawTextLower.contains("pickup") ||
+                                     rawTextLower.contains("dropoff") ||
+                                     rawTextLower.contains("km") ||
+                                     rawTextLower.contains("mi") ||
+                                     rawTextLower.contains("away") ||
+                                     rawTextLower.contains("රු") ||
+                                     rawTextLower.contains("rs") ||
+                                     rawTextLower.contains("lkr") ||
+                                     rawTextLower.contains("වාරිකය") || 
+                                     rawTextLower.contains("වාරිකාව") || 
+                                     rawTextLower.contains("සවාරිය") || 
+                                     rawTextLower.contains("සවාරි") || 
+                                     rawTextLower.contains("පිළිගන්න") || 
+                                     rawTextLower.contains("පිලිගන්න") || 
+                                     rawTextLower.contains("ප්‍රතික්ෂේප") || 
+                                     rawTextLower.contains("ප්‍රතික්‍ෂේප") || 
+                                     rawTextLower.contains("ප්රතික්ෂේප") || 
+                                     rawTextLower.contains("නව සවාරිය") ||
+                                     rawTextLower.contains("කි.මී.") ||
+                                     rawTextLower.contains("විනාඩි") ||
+                                     rawTextLower.contains("මුදලින්") ||
+                                     rawTextLower.contains("කාඩ්පතෙන්")
+
+                if (hasRideContext) {
+                    shouldTrigger = true
+                    Log.d("RideAccessibilityService", "Triggering overlay because we successfully extracted a valid ride fare of LKR $parsedFare.")
+                } else {
+                    Log.d("RideAccessibilityService", "Ignoring fare $parsedFare because no ride/distance/offer context keywords were found on screen.")
+                }
             }
         }
 
